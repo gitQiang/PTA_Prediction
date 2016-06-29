@@ -125,30 +125,26 @@ groupPredict <- function(data,i){
 
 oneDimPredict <- function(data,targetIndex,fre,per,sflag){
         
-        jobTrace(6,trace)
+        jobid <- 6
+        jobid <- jobTrace(jobid,trace)
         
-        
+        ## delete constant columns
         sdv <- sapply(1:ncol(data), function(i) sd(data[!is.na(data[,i]),i]))
         data <- data[, sdv!=0]
         
-        newr <- timelag_data(data,targetIndex,fre=fre)
-        newdata <- newr$newdata
-        lags <- newr$lags
-        sub <- max(delete_NA(newdata[,targetIndex]))-round(0.1*nrow(newdata))
+        ## time lags for all factors
+        newdata <- timelag_data(data,targetIndex,fre=fre)$newdata
+        sub <- max(delete_NA(newdata[,targetIndex]))-round(0.1*nrow(newdata)) ## delete discontinuous factors
         newdata <- newdata[,!is.na(newdata[sub,])]
         
-        
-        ### output
-        perform <- list();k=1;
-        
-        
+
         ### add time variable
         tmp <- colnames(newdata)[-targetIndex]
         newdata <- cbind(newdata[,targetIndex],1:nrow(newdata),newdata[,-targetIndex])
         colnames(newdata) <- c("Target","Time",tmp)
         
-        #### 2: the regression model with arima errors
-        ### Auto- Cohrane-Orcutt procedure
+        jobid <- jobTrace(jobid,trace) # 2: the regression model with arima errors
+
         newdata <- newdata[!is.na(newdata[,1]), ]
         vNA <- rowSums(is.na(newdata))
         vNA <- vNA[1:(which(vNA==min(vNA))[1]-1)]
@@ -161,6 +157,19 @@ oneDimPredict <- function(data,targetIndex,fre,per,sflag){
         endT <- ifelse(endT==Inf,nrow(tmpnewdata),endT)
         tmpnewdata <- tmpnewdata[1:(endT-1), !is.na(tmpnewdata[endT-1, ])]
                 
+        jobid <- jobTrace(jobid,trace)
+        ### output
+        perform <- list();k=1;
+        perform[[k]] <- oneModel(tmpnewdata,per=per,fre=fre,sflag=sflag)
+        k <- k+1
+        pseudoR <- pseudoPredict(tmpnewdata,per,targetIndex)
+        perform[[k]] <- pseudoR
+        
+        perform
+}
+
+oneModel <- function(tmpnewdata,per=per,fre=fre,sflag=sflag){
+        
         #### output 
         R2 <- 1:per ### R^2 values
         preds <- 1:per ### predict values
@@ -170,14 +179,13 @@ oneDimPredict <- function(data,targetIndex,fre,per,sflag){
         n2 <- nrow(data) ### input data length
         sub <- 1 ### default sub-index of y 
         labs0 <- rownames(data)      
-
+        
+        if(sflag==1) pdq <- c(1,1,2,0,0,0,1) #day
+        if(sflag==2) pdq <- c(1,1,1,2,1,0,7) #week
+        if(sflag==3) pdq <- c(0,1,1,0,1,1,11) #month
+        if(sflag==4) pdq <- c(0,1,0,0,1,0,2) #year
+        
         for(n1 in (n2-per):(n2-1)){
-                
-                if(sflag==1) pdq <- c(1,1,2,0,0,0,1) #sarima_paraNew(data[,sub],fre=fre)
-                if(sflag==2) pdq <- c(1,1,1,2,1,0,7) 
-                if(sflag==3) pdq <- c(0,1,1,0,1,1,11) 
-                if(sflag==4) pdq <- c(0,1,0,0,1,0,2)
-                
                 if(sflag<4){
                         #pdq <- sarima_paraNew(data[1:n1,sub],fre=fre)
                         stsr <- arima(ts(data[1:n1,sub],frequency = pdq[7]),order=pdq[1:3],seasonal = list(order=pdq[4:6],period=pdq[7]))
@@ -227,16 +235,11 @@ oneDimPredict <- function(data,targetIndex,fre,per,sflag){
         if(length(pos) > 20){pos <- pos[seq(1,length(pos),length.out=20)];labs <- labs[seq(1,length(labs),length.out=20)];}
         text(pos, par("usr")[3]-0.11*(ymax-ymin), labels = labs, srt = 90, pos = 1, xpd = TRUE)
         legend(ord,legend=c("¹Û²ìÖµ","Ô¤²âÖµ"),col=1:2,lwd=2) 
-
-        tmp <- list(R2=R2,preds=preds,residuals=residuals,para=para)
-        perform[[k]] <- tmp
-        k <- k+1
         
-        pseudoR <- pseudoPredict(tmpnewdata,per,targetIndex)
-        perform[[k]] <- pseudoR
-        k <- k+1
+        jobid <- jobTrace(jobid=9,trace)
         
-        perform
+        list(R2=R2,preds=preds,residuals=residuals,para=para)
+        
 }
 
 timelag_data <- function(data,targetIndex,per=20,fre=12,n.model=3){
@@ -299,10 +302,13 @@ delete_NA <- function(oneV,twoV=NULL){
 jobTrace <- function(job,trace=0){
         
         logFile = "PTArunning.log"
-        jobNames <- c("Data Loading ... ...","Day Prediction ... ...","Week Prediction ... ...","Month Prediction ... ...", "Season Prediction ... ...", "Data integrating ... ...")
+        jobNames <- c("Data Loading ... ...","Start Day Prediction ... ...","Start Week Prediction ... ...","Start Month Prediction ... ...", "Start Season Prediction ... ...", "Start Data integrating ... ...","Start Multiple factor selection ... ...","Start PTA-PPM module ... ...","End PTA-PPM module ... ...","","","")
         
         if(trace!=0) print(jobNames[job])
         printstr <- paste(Sys.time(), Sys.info()["user"],jobNames[job],sep="\t")
         cat(printstr, file=logFile, append=TRUE, sep = "\n")
+        
+        job <- job+1
+        job
 }
 

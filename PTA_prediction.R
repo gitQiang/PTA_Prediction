@@ -15,6 +15,7 @@ PTA_Prediction <- function(filenames=NULL,trace=0){
         #   by now, we directly ouput to shiny web site.
         
         #==========================================================
+        setwd("D:/code/PTA_Prediction") ## only for testing ...
         # library and source files
         source("misc.R")
         library(lubridate)
