@@ -123,10 +123,10 @@ groupPredict <- function(data,i){
         tmpdata
 }
 
-oneDimPredict <- function(data,targetIndex,fre,per,sflag){
+oneDimPredict <- function(data,targetIndex,fre,per,sflag,trace1){
         
         jobid <- 6
-        jobid <- jobTrace(jobid,trace)
+        jobid <- jobTrace(jobid,trace1)
         
         
         sdv <- sapply(1:ncol(data), function(i) sd(data[!is.na(data[,i]),i])) ## delete constant columns
@@ -139,7 +139,7 @@ oneDimPredict <- function(data,targetIndex,fre,per,sflag){
         newdata <- cbind(newdata[,targetIndex],1:nrow(newdata),newdata[,-targetIndex])
         colnames(newdata) <- c("Target","Time",tmp)
         
-        jobid <- jobTrace(jobid,trace) # 2: the regression model with arima errors
+        jobid <- jobTrace(jobid,trace1) # 2: the regression model with arima errors
 
         newdata <- newdata[!is.na(newdata[,1]), ]
         vNA <- rowSums(is.na(newdata))
@@ -149,14 +149,16 @@ oneDimPredict <- function(data,targetIndex,fre,per,sflag){
         i=1
         startT <- which(vNA==dNA[i])[1]
         tmpnewdata <- newdata[startT:nrow(newdata), !is.na(newdata[startT, ])]
+        options(warn=-1)
         endT <- min(which(is.na(tmpnewdata),arr.ind=TRUE)[,1])
         endT <- ifelse(endT==Inf,nrow(tmpnewdata),endT)
+        options(warn=0)
         tmpnewdata <- tmpnewdata[1:(endT-1), !is.na(tmpnewdata[endT-1, ])]
                 
-        jobid <- jobTrace(jobid,trace)
+        jobid <- jobTrace(jobid,trace1)
         ### output
         perform <- list();k=1;
-        perform[[k]] <- oneModel(tmpnewdata,targetIndex,per=per,fre=fre,sflag=sflag,plotP=TRUE)
+        perform[[k]] <- oneModel(tmpnewdata,sub=targetIndex,per=per,fre=fre,sflag=sflag,plotP=TRUE,trace1=trace1)
         k <- k+1
         pseudoR <- pseudoPredict(tmpnewdata,per,targetIndex)
         perform[[k]] <- pseudoR
@@ -164,7 +166,7 @@ oneDimPredict <- function(data,targetIndex,fre,per,sflag){
         perform
 }
 
-oneModel <- function(tmpnewdata,sub=1,per=per,fre=fre,sflag=sflag,plotP=TRUE){
+oneModel <- function(tmpnewdata,sub=1,per=per,fre=fre,sflag=sflag,plotP=TRUE,trace1){
 
         #### output 
         R2 <- 1:per ### R^2 values
@@ -228,7 +230,7 @@ oneModel <- function(tmpnewdata,sub=1,per=per,fre=fre,sflag=sflag,plotP=TRUE){
                 legend(ord,legend=c("¹Û²ìÖµ","Ô¤²âÖµ"),col=1:2,lwd=2) 
         }
         
-        jobid <- jobTrace(9,trace)
+        jobid <- jobTrace(9,trace1)
         
         list(R2=R2,preds=preds,residuals=residuals,para=para)
 }
@@ -239,7 +241,7 @@ pseudoPredict <- function(tmpdata,per,targetIndex=1){
         residuals <- 1:per
         n2 <- nrow(tmpdata)
         for(n1 in (n2-per):(n2-1)){
-                R2[n1-(n2-per-1)] <- R_squared_hq(tmpdata[2:n1,targetIndex],data[1:(n1-1),targetIndex])
+                R2[n1-(n2-per-1)] <- R_squared_hq(tmpdata[2:n1,targetIndex],tmpdata[1:(n1-1),targetIndex])
                 preds[n1-(n2-per-1)] <- tmpdata[n1,targetIndex]
                 residuals[n1-(n2-per-1)] <- tmpdata[n1+1,targetIndex] - preds[n1-(n2-per-1)]
         }
@@ -441,14 +443,19 @@ acf2_hq <- function(series, max.lag = NULL){
 }
 
 #=======job tracing and write log file
-jobTrace <- function(job,trace=0){
+jobTrace <- function(job,trace1=0){
         
         logFile = "PTArunning.log"
-        jobNames <- c("Data Loading ... ...","Start Day Prediction ... ...","Start Week Prediction ... ...","Start Month Prediction ... ...", "Start Season Prediction ... ...", "Start Data integrating ... ...","Start Multiple factor selection ... ...","Start PTA-PPM module ... ...","End PTA-PPM module ... ...","","","")
+        jobNames <- c("Data Loading ... ...","Start Day Prediction ... ...","Start Week Prediction ... ...","Start Month Prediction ... ...", "Start Season Prediction ... ...", "Start Data integrating ... ...","Start Multiple factor selection ... ...","Start PTA-PPM module ... ...","End PTA-PPM module ... ...","End One Run ... ...","Start One Run ... ...","Initialization ... ...")
         
-        if(trace!=0) print(jobNames[job])
+        if(trace1!=0) print(jobNames[job])
         printstr <- paste(Sys.time(), Sys.info()["user"],jobNames[job],sep="\t")
         cat(printstr, file=logFile, append=TRUE, sep = "\n")
+        
+        if(job==10){
+                cat("", file=logFile, append=TRUE, sep = "\n")
+                cat("", file=logFile, append=TRUE, sep = "\n")
+        }
         
         job <- job+1
         job

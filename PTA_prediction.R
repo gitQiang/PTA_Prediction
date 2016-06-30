@@ -6,21 +6,23 @@
 #'====================================================
 #' Qiang Huang, 2016/07/01, huangqiang@3golden.com.cn
 #'====================================================
-PTA_Prediction <- function(filenames=NULL,trace=0){
+PTA_Prediction <- function(filenames=NULL,trace1=0){
         # options
         #   filenames: filenames of add new indexes.
-        #   trace: print or not the running trace, 1 print, 0 not print
+        #   trace1: print or not the running trace, 1 print, 0 not print
         
         # output
         #   by now, we directly ouput to shiny web site.
         
         #==========================================================
         filenames=NULL
-        trace=0
+        trace1=1
         setwd("D:/code/PTA_Prediction") ## only for testing ...
         
         # library and source files
         source("misc.R")
+        jobid <- jobTrace(11,trace1);
+        jobid <- jobTrace(12,trace1);
         library(lubridate) ## as.Date
         library(zoo) ## na.approx
         library(forecast) ##CV
@@ -37,7 +39,7 @@ PTA_Prediction <- function(filenames=NULL,trace=0){
         # ? upload new indexes
         if(!is.null(filenames)){dataM <- addNewIndex(filenames,useYears);}else{dataM <- c();}
         
-        jobid <- jobTrace(1,trace)
+        jobid <- jobTrace(1,trace1)
         #data <- data_filling()
         load("data_2002_2015")
         data <- cbind(data,dataM)
@@ -55,15 +57,16 @@ PTA_Prediction <- function(filenames=NULL,trace=0){
         fres <- c(1,7,11,2)
         pers <- c(50,30,20,10)
         for(i in 1:4){
-                jobTrace(i+1,trace)
+                jobtmp <- jobTrace(i+1,trace1)
                 tmpdata <- groupPredict(data,i)
                 tmpdata1 <- sapply(1:ncol(tmpdata), function(i) na.approx(tof(tmpdata[,i]),maxgap=5,na.rm=FALSE))
                 colnames(tmpdata1) <- colnames(tmpdata)
                 rownames(tmpdata1) <- rownames(tmpdata)
                 tmpdata1 <- fraction_NA(tmpdata1,pNA=0.5)
-                tmp <- oneDimPredict(tmpdata1,targetIndex=1,fres[i],per=pers[i],sflag=i)
+                tmp <- oneDimPredict(tmpdata1,targetIndex=1,fre=fres[i],per=pers[i],sflag=i,trace1=trace1)
         }
         
+        jobid <- jobTrace(10,trace1)
         
 }
 
