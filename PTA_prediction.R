@@ -15,20 +15,16 @@ PTA_Prediction <- function(filenames=NULL,trace=0){
         #   by now, we directly ouput to shiny web site.
         
         #==========================================================
+        filenames=NULL
+        trace=0
         setwd("D:/code/PTA_Prediction") ## only for testing ...
+        
         # library and source files
         source("misc.R")
-        library(lubridate)
-        # library(zoo)
-        # library(tseries)
-        # library(forecast)
-        # library(gplots)
-        # library(relaimpo)
-        # library(leaps)
-        # library(MASS)
-        # library(astsa)
-        # library(data.table)
-        # library(glmnet)
+        library(lubridate) ## as.Date
+        library(zoo) ## na.approx
+        library(forecast) ##CV
+        
         
         #==========================================================
         # default parameter settings
@@ -41,7 +37,7 @@ PTA_Prediction <- function(filenames=NULL,trace=0){
         # ? upload new indexes
         if(!is.null(filenames)){dataM <- addNewIndex(filenames,useYears);}else{dataM <- c();}
         
-        jobTrace(1,trace)
+        jobid <- jobTrace(1,trace)
         #data <- data_filling()
         load("data_2002_2015")
         data <- cbind(data,dataM)

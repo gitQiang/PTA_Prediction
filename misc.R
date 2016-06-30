@@ -128,16 +128,12 @@ oneDimPredict <- function(data,targetIndex,fre,per,sflag){
         jobid <- 6
         jobid <- jobTrace(jobid,trace)
         
-        ## delete constant columns
-        sdv <- sapply(1:ncol(data), function(i) sd(data[!is.na(data[,i]),i]))
-        data <- data[, sdv!=0]
         
-        ## time lags for all factors
-        newdata <- timelag_data(data,targetIndex,fre=fre)$newdata
+        sdv <- sapply(1:ncol(data), function(i) sd(data[!is.na(data[,i]),i])) ## delete constant columns
+        data <- data[, sdv!=0]
+        newdata <- timelag_data(data,targetIndex,fre=fre)$newdata ## time lags for all factors
         sub <- max(delete_NA(newdata[,targetIndex]))-round(0.1*nrow(newdata)) ## delete discontinuous factors
         newdata <- newdata[,!is.na(newdata[sub,])]
-        
-
         ### add time variable
         tmp <- colnames(newdata)[-targetIndex]
         newdata <- cbind(newdata[,targetIndex],1:nrow(newdata),newdata[,-targetIndex])
@@ -160,7 +156,7 @@ oneDimPredict <- function(data,targetIndex,fre,per,sflag){
         jobid <- jobTrace(jobid,trace)
         ### output
         perform <- list();k=1;
-        perform[[k]] <- oneModel(tmpnewdata,per=per,fre=fre,sflag=sflag)
+        perform[[k]] <- oneModel(tmpnewdata,targetIndex,per=per,fre=fre,sflag=sflag,plotP=TRUE)
         k <- k+1
         pseudoR <- pseudoPredict(tmpnewdata,per,targetIndex)
         perform[[k]] <- pseudoR
@@ -168,17 +164,16 @@ oneDimPredict <- function(data,targetIndex,fre,per,sflag){
         perform
 }
 
-oneModel <- function(tmpnewdata,per=per,fre=fre,sflag=sflag){
-        
+oneModel <- function(tmpnewdata,sub=1,per=per,fre=fre,sflag=sflag,plotP=TRUE){
+
         #### output 
         R2 <- 1:per ### R^2 values
         preds <- 1:per ### predict values
         residuals <- 1:per
         para <- c()
         
-        n2 <- nrow(data) ### input data length
-        sub <- 1 ### default sub-index of y 
-        labs0 <- rownames(data)      
+        n2 <- nrow(tmpnewdata) ### input tmpnewdata length
+        labs0 <- rownames(tmpnewdata)      
         
         if(sflag==1) pdq <- c(1,1,2,0,0,0,1) #day
         if(sflag==2) pdq <- c(1,1,1,2,1,0,7) #week
@@ -187,20 +182,19 @@ oneModel <- function(tmpnewdata,per=per,fre=fre,sflag=sflag){
         
         for(n1 in (n2-per):(n2-1)){
                 if(sflag<4){
-                        #pdq <- sarima_paraNew(data[1:n1,sub],fre=fre)
-                        stsr <- arima(ts(data[1:n1,sub],frequency = pdq[7]),order=pdq[1:3],seasonal = list(order=pdq[4:6],period=pdq[7]))
-                        tmpdata <- data[1:n1,]
+                        #pdq <- sarima_paraNew(tmpnewdata[1:n1,sub],fre=fre)
+                        stsr <- arima(ts(tmpnewdata[1:n1,sub],frequency = pdq[7]),order=pdq[1:3],seasonal = list(order=pdq[4:6],period=pdq[7]))
+                        tmpdata <- tmpnewdata[1:n1,]
                         tmpdata[,sub] <- stsr$residuals
                         xnew <-stepCV_hq(tmpdata,sub,cvf=1,dir="forward")
-                        mlmr <- lm(paste(colnames(tmpdata)[sub]," ~ ",paste(xnew,sep="",collapse = "+"),sep=""),data=as.data.frame(tmpdata))
+                        mlmr <- lm(paste(colnames(tmpdata)[sub]," ~ ",paste(xnew,sep="",collapse = "+"),sep=""), data=as.data.frame(tmpdata))
                         res1 <- mlmr$residuals
-                        
                 }
                 
                 if(sflag==4){
-                        tmpdata <- as.data.frame(data[1:n1,])
+                        tmpdata <- as.data.frame(tmpnewdata[1:n1,])
                         xnew <-stepCV_hq(tmpdata,sub,cvf=1,dir="forward")
-                        mlmr <- lm( paste(colnames(tmpdata)[sub]," ~ ",paste(xnew,sep="",collapse = "+"),sep=""),data=tmpdata )
+                        mlmr <- lm( paste(colnames(tmpdata)[sub]," ~ ",paste(xnew,sep="",collapse = "+"),sep=""), data=tmpdata )
                         res <- ts(mlmr$residuals,frequency = fre)
                         pdq <- sarima_paraNew(res,fre=fre)
                         stsr <- arima(res,order=pdq[1:3],seasonal = list(order=pdq[4:6],period=pdq[7]))
@@ -208,38 +202,140 @@ oneModel <- function(tmpnewdata,per=per,fre=fre,sflag=sflag){
                 }
                 
                 #### one step prediction
-                if(sflag<4){
-                        oneP <- pdq
-                        preds[n1-(n2-per-1)] <- sum(c(1,data[n1+1,xnew]) * tof(as.vector(mlmr$coefficients),na.rm=FALSE,fill=TRUE,f="zero"))  +  predict(stsr, n.ahead=1)$pred[1]
-                }else if(sflag==4){
-                        oneP <- pdq
-                        preds[n1-(n2-per-1)] <- sum(c(1,data[n1+1,xnew]) * tof(as.vector(mlmr$coefficients),na.rm=FALSE,fill=TRUE,f="zero"))  +  predict(stsr, n.ahead=1)$pred[1]
-                }
-                
-                R2[n1-(n2-per-1)] <- R_squared_hq(data[1:n1,sub],data[1:n1,sub]-res1)
-                residuals[n1-(n2-per-1)] <- data[n1+1,sub] - preds[n1-(n2-per-1)]
+                preds[n1-(n2-per-1)] <- sum(c(1,tmpnewdata[n1+1,xnew]) * tof(as.vector(mlmr$coefficients),na.rm=FALSE,fill=TRUE,f="zero"))  +  predict(stsr, n.ahead=1)$pred[1]
+                oneP <- pdq
                 para <- cbind(para,oneP)
+                R2[n1-(n2-per-1)] <- R_squared_hq(tmpnewdata[1:n1,sub],tmpnewdata[1:n1,sub]-res1)
+                residuals[n1-(n2-per-1)] <- tmpnewdata[n1+1,sub] - preds[n1-(n2-per-1)]
+                
         }
         
-        #### plot predict result
-        n1=n2-per
-        ymax <- 1.1*max(c(data[(n1+1):n2,sub],as.vector(preds)))
-        ymin <- 0.9*min(c(data[(n1+1):n2,sub],as.vector(preds)))
-        labs=rownames(data)[(n1+1):n2]
-        par(mai=c(1.2,1.2,1,1))
-        plot(data[(n1+1):n2,sub],col=1,type="b",ylim=c(ymin,ymax),ylab="Price",xlab="",xaxt="n",lwd=3,main=main)
-        lines(as.vector(preds),col=2,type="b",lwd=3)
-        axis(1,at=1:(n2-n1),labels =FALSE)  
+        if(plotP){
+                main="";ylab="Price";xlab="";ord="topleft";
+                #### plot predict result
+                n1=n2-per
+                ymax <- 1.1*max(c(tmpnewdata[(n1+1):n2,sub],as.vector(preds)))
+                ymin <- 0.9*min(c(tmpnewdata[(n1+1):n2,sub],as.vector(preds)))
+                labs=rownames(tmpnewdata)[(n1+1):n2]
+                par(mai=c(1.2,1.2,1,1))
+                plot(tmpnewdata[(n1+1):n2,sub],col=1,type="b",ylim=c(ymin,ymax),ylab=ylab,xlab=xlab,xaxt="n",lwd=3,main=main)
+                lines(as.vector(preds),col=2,type="b",lwd=3)
+                axis(1,at=1:(n2-n1),labels =FALSE)  
+                
+                pos <- 1:(n2-n1)-per/100
+                if(length(pos) > 20){pos <- pos[seq(1,length(pos),length.out=20)];labs <- labs[seq(1,length(labs),length.out=20)];}
+                text(pos, par("usr")[3]-0.11*(ymax-ymin), labels = labs, srt = 90, pos = 1, xpd = TRUE)
+                legend(ord,legend=c("观察值","预测值"),col=1:2,lwd=2) 
+        }
         
-        pos <- 1:(n2-n1)-per/100
-        if(length(pos) > 20){pos <- pos[seq(1,length(pos),length.out=20)];labs <- labs[seq(1,length(labs),length.out=20)];}
-        text(pos, par("usr")[3]-0.11*(ymax-ymin), labels = labs, srt = 90, pos = 1, xpd = TRUE)
-        legend(ord,legend=c("观察值","预测值"),col=1:2,lwd=2) 
-        
-        jobid <- jobTrace(jobid=9,trace)
+        jobid <- jobTrace(9,trace)
         
         list(R2=R2,preds=preds,residuals=residuals,para=para)
+}
+
+pseudoPredict <- function(tmpdata,per,targetIndex=1){
+        R2 <- 1:per
+        preds <- 1:per
+        residuals <- 1:per
+        n2 <- nrow(tmpdata)
+        for(n1 in (n2-per):(n2-1)){
+                R2[n1-(n2-per-1)] <- R_squared_hq(tmpdata[2:n1,targetIndex],data[1:(n1-1),targetIndex])
+                preds[n1-(n2-per-1)] <- tmpdata[n1,targetIndex]
+                residuals[n1-(n2-per-1)] <- tmpdata[n1+1,targetIndex] - preds[n1-(n2-per-1)]
+        }
         
+        list(R2=R2,preds=preds,residuals=residuals,para=-1)
+}
+
+sarima_paraNew <- function(x,fre=10,nlag=0){
+        
+        if(!is.ts(x)) x <- as.ts(x,frequency=fre)
+        if(nlag==0) nlag <- min(length(x) - fre+1,200)
+        ## reference: http://people.duke.edu/~rnau/arimrule.htm
+        sd=1; ## one fixed value !!!!
+        maxd <- 5
+        
+        tmp <- acf2_hq(x,max.lag=nlag)
+        d=0;
+        if(all(tmp[1:5,"ACF"]>0)){
+                sdd <- sapply(1:maxd, function(i) sd(diff(x,i)))
+                d <- which.min(sdd)
+        }
+        
+        if(d>0){
+                dx <- diff(x,d)
+                tmp <- acf2_hq(dx,max.lag = min(nlag,length(dx)-2))
+        }else{ dx <- x; }
+        
+        dashV <- -1/length(dx) + 1.96/sqrt(length(dx))
+        p <- which(abs(tmp[,"PACF"])<dashV)[1] - 1
+        p <- ifelse(p<0,0,p)
+        
+        q <- which(abs(tmp[,"ACF"])<dashV)[1] - 1
+        q <- ifelse(q<0,0,q)
+        
+        peak0 <- which(tmp[,"ACF"] > dashV)
+        dpeak0 <- diff(peak0,1)
+        fres0 <- dpeak0[dpeak0 > fre/2 & dpeak0 < 1.5*fre]
+        sma <- length(fres0)
+        peak1 <- which(tmp[,"PACF"] > dashV)
+        dpeak1 <- diff(peak1,1)
+        fres1 <- dpeak1[dpeak1 > fre/2 & dpeak1 < 1.5*fre]
+        sar <- length(fres1)
+        fres <- unique(c(fres0,fres1))
+        
+        if(fre==1){sar=0;sma=0;fres=1;}
+        
+        minBIC <- 1e9
+        pdq <- c(p,d,q,0,sd,0,fre)
+        for(f in fres){
+                tmp <- auto.arima(ts(x,frequency = f), d=d, D=sd, max.p=max(p,1), max.q=max(q,1), max.P=max(sar,1), max.Q=max(sma,1), max.d=d, max.D=sd, start.p=0, start.q=0, start.P=0, start.Q=0, seasonal=TRUE, ic="bic",stepwise = FALSE)
+                onebic <- BIC(tmp)
+                if(onebic < minBIC){ minBIC <- onebic; pdq <- tmp$arma[c(1,6,2,3,7,4,5)]; }
+        }
+
+        pdq
+}
+
+stepCV_hq <- function(data,sub=1,cvf=1,dir="backward"){
+        ### which measure is used: 1:CV;2:AIC;3:AICc;4:BIC;5:AdjR2 
+        
+        Y <- colnames(data)[sub]
+        X <- colnames(data)[-sub]
+        CVs <- sapply(X, function(i) CV(lm( paste(Y,"~",i,sep=""),  data=as.data.frame(data) ))[cvf])
+        if(cvf==5){CVs = 1-CVs;}
+        
+        
+        if(dir=="backward"){
+                fit0 <- lm(paste(Y,"~.",sep=""), data=as.data.frame(data))
+                print(CV(fit0))
+                CV0 <- ifelse(cvf<=4,CV(fit0)[cvf],1-CV(fit0)[cvf])
+                tmp <- sort(CVs,decreasing = TRUE, index.return=TRUE)
+                X <- X[tmp$ix]
+                Xnew <- X;
+                for(i in 1:length(X)){
+                        tmpfit <-  lm(paste(Y," ~ ",paste(setdiff(Xnew,X[i]),sep="",collapse=" + "),sep=""), data=as.data.frame(data))
+                        tmpCV <- ifelse(cvf<=4,CV(tmpfit)[cvf],1-CV(tmpfit)[cvf])
+                        print(tmpCV)
+                        print(CV0)
+                        if(tmpCV < CV0){fit0 <- tmpfit; CV0 <- tmpCV; Xnew <- setdiff(Xnew,X[i]);}
+                }
+        }
+        
+        if(dir=="forward"){
+                tmp <- sort(CVs, index.return=TRUE)
+                X <- X[tmp$ix]
+                Xnew <- X[1];
+                fit0 <-  lm(paste(Y," ~ ",X[1],sep=""), data=as.data.frame(data))
+                CV0 <- ifelse(cvf<=4,CV(fit0)[cvf],1 - CV(fit0)[cvf])
+                for(i in 2:length(X)){
+                        tmpfit <-  lm(paste(Y," ~ ",paste(c(Xnew,X[i]),sep="",collapse=" + "),sep=""), data=as.data.frame(data))
+                        tmpCV <- ifelse(cvf<=4,CV(tmpfit)[cvf],1-CV(tmpfit)[cvf])
+                        if(tmpCV < CV0){fit0 <- tmpfit; CV0 <- tmpCV; Xnew <- c(Xnew,X[i]);}
+                }
+        }
+        
+        Xnew
 }
 
 timelag_data <- function(data,targetIndex,per=20,fre=12,n.model=3){
@@ -298,6 +394,52 @@ delete_NA <- function(oneV,twoV=NULL){
         }
 }
 
+tof <- function(oneV,na.rm=FALSE,fill=FALSE,f="mean"){
+        ## replace function of as.numeric
+        options(warn=-1)
+        oneV <- as.numeric(oneV)
+        options(warn=0)
+        
+        if(na.rm) oneV <- oneV[!is.na(oneV)]
+        if(fill){
+                if(f=="mean") oneV[is.na(oneV)] <- mean(oneV[!is.na(oneV)])
+                if(f=="min") oneV[is.na(oneV)] <- min(oneV[!is.na(oneV)])
+                if(f=="median") oneV[is.na(oneV)] <- median(oneV[!is.na(oneV)])
+                if(f=="zero") oneV[is.na(oneV)] <- 0
+        }
+        oneV
+}
+
+fraction_NA  <- function(tmp,pNA=0.5){
+        mode(tmp) <- "numeric"
+        ksubs <- rep(TRUE,ncol(tmp))
+        ksubs <- sapply( 1:(ncol(tmp)), function(i) sum(is.na(tmp[,i])) <  pNA*nrow(tmp) )
+        tmp <- tmp[,ksubs]
+        tmp  
+}
+
+R_squared_hq <- function(y,y1){
+        y_ <- mean(y)
+        1-(sum((y-y1)^2)/sum((y-y_)^2))
+}
+
+acf2_hq <- function(series, max.lag = NULL){
+        
+        num = length(series)
+        if (num > 49 & is.null(max.lag)) 
+                max.lag = ceiling(10 + sqrt(num))
+        if (num < 50 & is.null(max.lag)) 
+                max.lag = floor(5 * log10(num))
+        if (max.lag > (num - 1)) 
+                stop("Number of lags exceeds number of observations")
+        ACF = stats::acf(series, max.lag, plot = FALSE)$acf[-1]
+        PACF = stats::pacf(series, max.lag, plot = FALSE)$acf
+        
+        ACF <- round(ACF, 2)
+        PACF <- round(PACF, 2)
+        return(cbind(ACF, PACF))
+}
+
 #=======job tracing and write log file
 jobTrace <- function(job,trace=0){
         
@@ -311,4 +453,3 @@ jobTrace <- function(job,trace=0){
         job <- job+1
         job
 }
-
