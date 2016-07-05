@@ -44,14 +44,25 @@ PTA_Prediction <- function(filenames=NULL,trace1=0){
         load("data_2002_2015")
         data <- cbind(data,dataM)
         mode(data) <- "numeric"
-        
+
         # specific setting to PTA Price
-        target <- "ÊÐ³¡¼Û.PTA.¶Ô±½¶þ¼×Ëá."
+        target <- "å¸‚åœºä»·.PTA.å¯¹è‹¯äºŒç”²é…¸."
         sub <- which(colnames(data)==target)
         tmp <- data[,-sub]
         data <- cbind(data[,sub],tmp)
         colnames(data)[1] <- "Target"
         
+        # data index transform
+        tmp <- data_transform(data[,2:ncol(data)])
+        colnames(tmp) <- colnames(data)[2:ncol(data)]
+        # target transform
+        # tmpsub <- which(!is.na(data[,1]))
+        # x1 <- Target_transform(data[tmpsub,1])
+        # data[tmpsub[-1],1] <- x1
+        # data[tmpsub[1],1] <- NA
+        
+        
+        data <- cbind(data[,1],tmp)
         #==========================================================
         ## one day, one week, one month and one quarter predictions
         fres <- c(1,7,11,2)
@@ -70,10 +81,10 @@ PTA_Prediction <- function(filenames=NULL,trace1=0){
         
 }
 
-### Ô¤Áô½Ó¿Ú£¬ÓÃÓÚ»ñÈ¡ÊµÊ±Êý¾Ý
+### é¢„ç•™æŽ¥å£ï¼Œç”¨äºŽèŽ·å–å®žæ—¶æ•°æ®
 getUpdateData <- function(){}
 
-### Ô¤Áô½Ó¿Ú£¬ÓÃÓÚÔö¼ÓÐÂµÄÊý¾ÝÖ¸±ê
+### é¢„ç•™æŽ¥å£ï¼Œç”¨äºŽå¢žåŠ æ–°çš„æ•°æ®æŒ‡æ ‡
 addNewIndex <- function(filenames=NULL,useYears=2002:2016){
         
         startYear <- useYears[1]
@@ -109,4 +120,3 @@ addNewIndex <- function(filenames=NULL,useYears=2002:2016){
         colnames(dataM) <- factors
         dataM
 }
-
