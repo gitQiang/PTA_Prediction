@@ -4,9 +4,9 @@ csv_clean <- function(filename,wfile=""){
         oneTable <- read.csv(filename,strip.white=TRUE)
         
         ### repalce special chars
-        oneTable[,1] <- gsub("??","-",oneTable[,1])
-        oneTable[,1] <- gsub("??","-",oneTable[,1])
-        oneTable[,1] <- gsub("??","",oneTable[,1])
+        oneTable[,1] <- gsub("年","-",oneTable[,1])
+        oneTable[,1] <- gsub("月","-",oneTable[,1])
+        oneTable[,1] <- gsub("日","",oneTable[,1])
         oneTable[,1] <- gsub("/","-",oneTable[,1])
         for(j in 2:ncol(oneTable)) oneTable[,j] <- gsub(",","",oneTable[,j])
         
@@ -47,7 +47,7 @@ fill_NA <- function(tmpTable,len=4){
 
 data_filling <- function(){
         
-        path <- "D:/data/????/???莨???/????????????/data_v1"
+        path <- "D:/data/恒逸/恒逸共享/调研数据整理/data_v1"
         filenames <- list.files(path,".csv",full.names=TRUE)
         useYears <- 2002:2016
         useDates <- seq.Date(as.Date("2002-1-1"),as.Date("2016-12-31"),by="day")
@@ -154,7 +154,7 @@ groupPredict <- function(data,i){
         tmpdata
 }
 
-oneDimPredict <- function(data,targetIndex,fre,per,sflag,trace1){
+oneDimPredict <- function(data,targetIndex,fre,per,sflag,trace1,trans=0){
         
         jobid <- 6
         jobid <- jobTrace(jobid,trace1)
@@ -189,7 +189,7 @@ oneDimPredict <- function(data,targetIndex,fre,per,sflag,trace1){
         jobid <- jobTrace(jobid,trace1)
         ### output
         perform <- list();k=1;
-        perform[[k]] <- oneModel(tmpnewdata,sub=targetIndex,per=per,fre=fre,sflag=sflag,plotP=TRUE,trace1=trace1)
+        perform[[k]] <- oneModel(tmpnewdata,sub=targetIndex,per=per,fre=fre,sflag=sflag,plotP=TRUE,trace1=trace1,trans=trans)
         k <- k+1
         pseudoR <- pseudoPredict(tmpnewdata,per,targetIndex)
         perform[[k]] <- pseudoR
@@ -197,7 +197,7 @@ oneDimPredict <- function(data,targetIndex,fre,per,sflag,trace1){
         perform
 }
 
-oneModel <- function(tmpnewdata,sub=1,per=per,fre=fre,sflag=sflag,plotP=TRUE,trace1){
+oneModel <- function(tmpnewdata,sub=1,per=per,fre=fre,sflag=sflag,plotP=TRUE,trace1,trans=0){
         
         #### output 
         R2 <- 1:per ### R^2 values
@@ -208,14 +208,21 @@ oneModel <- function(tmpnewdata,sub=1,per=per,fre=fre,sflag=sflag,plotP=TRUE,tra
         n2 <- nrow(tmpnewdata) ### input tmpnewdata length
         labs0 <- rownames(tmpnewdata)      
         
-        if(sflag==1) pdq <- c(1,1,2,0,0,0,1) #day
-        if(sflag==2) pdq <- c(1,1,1,2,1,0,7) #week
-        if(sflag==3) pdq <- c(0,1,1,0,1,1,11) #month
-        if(sflag==4) pdq <- c(0,1,0,0,1,0,4) #season
+        if(trans==0){
+                if(sflag==1) pdq <- c(1,1,2,0,0,0,1) #day
+                if(sflag==2) pdq <- c(1,1,1,2,1,0,7) #week
+                if(sflag==3) pdq <- c(0,1,1,0,1,1,11) #month
+                if(sflag==4) pdq <- c(0,1,0,0,1,0,4) #season
+        }else if(trans==1){
+                if(sflag==1) pdq <- c(1,0,1,0,0,0,1) #day
+                if(sflag==2) pdq <- c(1,0,3,0,1,0,7) #week
+                if(sflag==3) pdq <- c(1,0,1,0,1,1,10) #month
+                if(sflag==4) pdq <- c(0,0,0,0,1,0,4) #season
+        }
         
         for(n1 in (n2-per):(n2-1)){
                 if(sflag<4){
-                        #pdq <- sarima_paraNew(tmpnewdata[1:n1,sub],fre=fre)
+                        # pdq <- sarima_paraNew(tmpnewdata[1:n1,sub],fre=fre)
                         stsr <- arima(ts(tmpnewdata[1:n1,sub],frequency = pdq[7]),order=pdq[1:3],seasonal = list(order=pdq[4:6],period=pdq[7]))
                         tmpdata <- tmpnewdata[1:n1,]
                         tmpdata[,sub] <- stsr$residuals
@@ -243,11 +250,12 @@ oneModel <- function(tmpnewdata,sub=1,per=per,fre=fre,sflag=sflag,plotP=TRUE,tra
                 
         }
         
-        if(plotP){n1=n2-per;labs=rownames(tmpnewdata)[(n1+1):n2]; plot_testing(tmpnewdata[(n1+1):n2,sub],as.vector(preds),labs);} 
+        if(plotP & trans==0){n1=n2-per;labs=rownames(tmpnewdata)[(n1+1):n2]; plot_testing(tmpnewdata[(n1+1):n2,sub],as.vector(preds),labs);} 
 
         jobid <- jobTrace(9,trace1)
         
-        list(R2=R2,preds=preds,residuals=residuals,para=para)
+        list(obs=tmpnewdata[(n2-per+1):n2,sub],R2=R2,preds=preds,residuals=residuals,para=para,labs=rownames(tmpnewdata)[(n2-per+1):n2])
+        
 }
 
 plot_testing <- function(obs,preds,labs){
@@ -265,6 +273,14 @@ plot_testing <- function(obs,preds,labs){
         legend(ord,legend=c("Observed","Prediction"),col=1:2,lwd=2)         
 }
 
+precision_pred <- function(tmp,p=0.03){
+     dobs <- diff(tmp[[1]]$obs,1)
+     dpred <- diff(tmp[[1]]$preds,1)
+     sub1 <- abs(tmp[[1]]$residuals)/tmp[[1]]$obs < p
+     sub2 <- c(TRUE, dobs * dpred >= 0)
+     sum(sub1 & sub2)/length(tmp[[1]]$obs)
+}
+
 pseudoPredict <- function(tmpdata,per,targetIndex=1){
         R2 <- 1:per
         preds <- 1:per
@@ -275,8 +291,8 @@ pseudoPredict <- function(tmpdata,per,targetIndex=1){
                 preds[n1-(n2-per-1)] <- tmpdata[n1,targetIndex]
                 residuals[n1-(n2-per-1)] <- tmpdata[n1+1,targetIndex] - preds[n1-(n2-per-1)]
         }
-        
-        list(R2=R2,preds=preds,residuals=residuals,para=-1)
+       
+        list(obs=tmpdata[(n2-per+1):n2,targetIndex],R2=R2,preds=preds,residuals=residuals,para=-1,labs=rownames(tmpdata)[(n2-per+1):n2])
 }
 
 sarima_paraNew <- function(x,fre=10,nlag=0){
