@@ -189,7 +189,8 @@ oneDimPredict <- function(data,targetIndex,fre,per,sflag,trace1,trans=0){
         jobid <- jobTrace(jobid,trace1)
         ### output
         perform <- list();k=1;
-        perform[[k]] <- oneModel(tmpnewdata,sub=targetIndex,per=per,fre=fre,sflag=sflag,plotP=TRUE,trace1=trace1,trans=trans)
+        #perform[[k]] <- oneModel(tmpnewdata,sub=targetIndex,per=per,fre=fre,sflag=sflag,plotP=TRUE,trace1=trace1,trans=trans)
+        perform[[k]] <- twoModel(tmpnewdata,sub=targetIndex,per=per,fre=fre,sflag=sflag,plotP=TRUE,trace1=trace1,trans=trans)
         k <- k+1
         pseudoR <- pseudoPredict(tmpnewdata,per,targetIndex)
         perform[[k]] <- pseudoR
@@ -213,6 +214,7 @@ oneModel <- function(tmpnewdata,sub=1,per=per,fre=fre,sflag=sflag,plotP=TRUE,tra
                 if(sflag==2) pdq <- c(1,1,1,2,1,0,7) #week
                 if(sflag==3) pdq <- c(0,1,1,0,1,1,11) #month
                 if(sflag==4) pdq <- c(0,1,0,0,1,0,4) #season
+                if(sflag==5) pdq <- c(1,0,1,0,1,1,10) #month to season
         }else if(trans==1){
                 if(sflag==1) pdq <- c(1,0,1,0,0,0,1) #day
                 if(sflag==2) pdq <- c(1,0,3,0,1,0,7) #week
@@ -241,14 +243,36 @@ oneModel <- function(tmpnewdata,sub=1,per=per,fre=fre,sflag=sflag,plotP=TRUE,tra
                         res1 <- stsr$residuals
                 }
                 
-                #### one step prediction
-                preds[n1-(n2-per-1)] <- sum(c(1,tmpnewdata[n1+1,xnew]) * tof(as.vector(mlmr$coefficients),na.rm=FALSE,fill=TRUE,f="zero"))  +  predict(stsr, n.ahead=1)$pred[1]
-                oneP <- pdq
-                para <- cbind(para,oneP)
-                R2[n1-(n2-per-1)] <- R_squared_hq(tmpnewdata[1:n1,sub],tmpnewdata[1:n1,sub]-res1)
-                residuals[n1-(n2-per-1)] <- tmpnewdata[n1+1,sub] - preds[n1-(n2-per-1)]
+                if(sflag <= 4){
+                        #### one step prediction
+                        preds[n1-(n2-per-1)] <- sum(c(1,tmpnewdata[n1+1,xnew]) * tof(as.vector(mlmr$coefficients),na.rm=FALSE,fill=TRUE,f="zero"))  +  predict(stsr, n.ahead=1)$pred[1]
+                        oneP <- pdq
+                        para <- cbind(para,oneP)
+                        R2[n1-(n2-per-1)] <- R_squared_hq(tmpnewdata[1:n1,sub],tmpnewdata[1:n1,sub]-res1)
+                        residuals[n1-(n2-per-1)] <- tmpnewdata[n1+1,sub] - preds[n1-(n2-per-1)]
+                }
                 
+                if(sflag==5){
+                        k <- n1-(n2-per)
+                        n11 <- n2 - 3 *per + k*3
+                        
+                        stsr <- arima(ts(tmpnewdata[1:n11,sub],frequency = pdq[7]),order=pdq[1:3],seasonal = list(order=pdq[4:6],period=pdq[7]))
+                        tmpdata <- tmpnewdata[1:n11,]
+                        tmpdata[,sub] <- stsr$residuals
+                        xnew <-stepCV_hq(tmpdata,sub,cvf=1,dir="forward")
+                        mlmr <- lm(paste(colnames(tmpdata)[sub]," ~ ",paste(xnew,sep="",collapse = "+"),sep=""), data=as.data.frame(tmpdata))
+                        res1 <- mlmr$residuals
+                        
+                        #### one step prediction
+                        preds[n1-(n2-per-1)] <- mean(sum(c(1,tmpnewdata[n11+1,xnew]) * tof(as.vector(mlmr$coefficients),na.rm=FALSE,fill=TRUE,f="zero"))  +  predict(stsr, n.ahead=3)$pred)
+                        oneP <- pdq
+                        para <- cbind(para,oneP)
+                        R2[n1-(n2-per-1)] <- R_squared_hq(tmpnewdata[1:n11,sub],tmpnewdata[1:n11,sub]-res1)
+                        residuals[n1-(n2-per-1)] <- mean(tmpnewdata[(n11+1):(n11+3),sub]) - preds[n1-(n2-per-1)]
+                }
         }
+        
+        if(sflag==5){rownames(tmpnewdata) <- paste(rownames(tmpnewdata),"-1",sep=""); tmpnewdata <- groupPredict(tmpnewdata,4); n2 <- nrow(tmpnewdata);}
         
         if(plotP & trans==0){n1=n2-per;labs=rownames(tmpnewdata)[(n1+1):n2]; plot_testing(tmpnewdata[(n1+1):n2,sub],as.vector(preds),labs);} 
 
@@ -256,6 +280,58 @@ oneModel <- function(tmpnewdata,sub=1,per=per,fre=fre,sflag=sflag,plotP=TRUE,tra
         
         list(obs=tmpnewdata[(n2-per+1):n2,sub],R2=R2,preds=preds,residuals=residuals,para=para,labs=rownames(tmpnewdata)[(n2-per+1):n2])
         
+}
+
+twoModel <- function(tmpnewdata,sub=1,per=per,fre=fre,sflag=sflag,plotP=TRUE,trace1,trans=0){
+                
+                #### output 
+                R2 <- 1:per ### R^2 values
+                preds <- 1:per ### predict values
+                residuals <- 1:per
+                para <- c()
+                
+                n2 <- nrow(tmpnewdata) ### input tmpnewdata length
+                labs0 <- rownames(tmpnewdata)      
+                
+                ### H-W model gamma 
+                gamma = FALSE; #if(sflag==3) gamma=TRUE; 
+                pdq=-1
+                for(n1 in (n2-per):(n2-1)){
+                        if(sflag<4){
+                                stsr <- HoltWinters(ts(tmpnewdata[1:n1,sub],frequency = fre),gamma=gamma)
+                                tmpdata <- tmpnewdata[1:n1,]
+                                
+                                tmpdata[,sub] <- tmpdata[,sub] - c(tmpdata[1:2,sub], stsr$fitted[,"xhat"])
+                                if(length(c(tmpdata[1:2,sub], stsr$fitted[,"xhat"]))!=length(tmpdata[,sub]) ) print("aa")
+                                xnew <-stepCV_hq(tmpdata,sub,cvf=1,dir="forward")
+                                mlmr <- lm(paste(colnames(tmpdata)[sub]," ~ ",paste(xnew,sep="",collapse = "+"),sep=""), data=as.data.frame(tmpdata))
+                                res1 <- mlmr$residuals
+                        }
+                        
+                        if(sflag==4){
+                                tmpdata <- as.data.frame(tmpnewdata[1:n1,])
+                                xnew <-stepCV_hq(tmpdata,sub,cvf=1,dir="forward")
+                                mlmr <- lm( paste(colnames(tmpdata)[sub]," ~ ",paste(xnew,sep="",collapse = "+"),sep=""), data=tmpdata )
+                                res <- ts(mlmr$residuals,frequency = fre)
+                                stsr <- HoltWinters(res,gamma=gamma)
+                                res1 <- res - c(0,0,stsr$fitted[,"xhat"])
+                        }
+                        
+                        
+                        #### one step prediction
+                        preds[n1-(n2-per-1)] <- sum(c(1,tmpnewdata[n1+1,xnew]) * tof(as.vector(mlmr$coefficients),na.rm=FALSE,fill=TRUE,f="zero"))  +  predict(stsr,1)[1]
+                        oneP <- pdq
+                        para <- cbind(para,oneP)
+                        R2[n1-(n2-per-1)] <- R_squared_hq(tmpnewdata[1:n1,sub],tmpnewdata[1:n1,sub]-res1)
+                        residuals[n1-(n2-per-1)] <- tmpnewdata[n1+1,sub] - preds[n1-(n2-per-1)]
+                }
+                
+                if(plotP & trans==0){n1=n2-per;labs=rownames(tmpnewdata)[(n1+1):n2]; plot_testing(tmpnewdata[(n1+1):n2,sub],as.vector(preds),labs);} 
+                
+                jobid <- jobTrace(9,trace1)
+                
+                list(obs=tmpnewdata[(n2-per+1):n2,sub],R2=R2,preds=preds,residuals=residuals,para=para,labs=rownames(tmpnewdata)[(n2-per+1):n2])
+                
 }
 
 plot_testing <- function(obs,preds,labs){
@@ -274,11 +350,19 @@ plot_testing <- function(obs,preds,labs){
 }
 
 precision_pred <- function(tmp,p=0.03){
-     dobs <- diff(tmp[[1]]$obs,1)
-     dpred <- diff(tmp[[1]]$preds,1)
-     sub1 <- abs(tmp[[1]]$residuals)/tmp[[1]]$obs < p
-     sub2 <- c(TRUE, dobs * dpred >= 0)
-     sum(sub1 & sub2)/length(tmp[[1]]$obs)
+        n <- length(tmp[[1]]$preds)
+        dobs <- diff(tmp[[1]]$obs,1)
+        dpred <- diff(tmp[[1]]$preds,1)
+        sub1 <- abs(tmp[[1]]$residuals)/tmp[[1]]$obs < p
+        sub2 <- dobs * dpred >= 0
+        
+        s1 <- sum(sub1)/n
+        s2 <- sum(sub2)/(n-1)
+        s3 <- sum(sub1 & c(TRUE,sub2) )/n
+        s4 <- as.vector(summary(abs(tmp[[1]]$residuals)))
+        s5 <- as.vector(summary(tmp[[1]]$R2))
+        
+        list(s1=s1,s2=s2,s3=s3,s4=s4,s5=s5)
 }
 
 pseudoPredict <- function(tmpdata,per,targetIndex=1){

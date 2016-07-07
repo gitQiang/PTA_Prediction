@@ -65,7 +65,7 @@ PTA_Prediction <- function(filenames=NULL,trace1=0,trans=0){
         ## one day, one week, one month and one quarter predictions
         fres <- c(1,7,12,4)
         pers <- c(50,30,20,10)
-        precs <- 1:4
+        precs <- list()
         
         results <- list()
         
@@ -94,7 +94,7 @@ PTA_Prediction <- function(filenames=NULL,trace1=0,trans=0){
                         pred0 <- Target_transform(tmp[[1]]$preds, target0[ind0-1])
                         plot_testing(obs0,pred0,tmp[[1]]$labs)
                 }
-                precs[i] <- precision_pred(results[[i]],p=0.05)
+                precs[[i]] <- precision_pred(results[[i]],p=0.05)
         }
         
         jobid <- jobTrace(10,trace1)

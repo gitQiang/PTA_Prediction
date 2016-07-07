@@ -14,8 +14,8 @@ plot_PTA_Price <- function(data){
                 x <- diff(tmpdata1[,1],1)
                 plot_acfs(x)
                 
-                x <- log(tmpdata1[,1])
-                plot_acfs(x)
+                # x <- log(tmpdata1[,1])
+                # plot_acfs(x)
                 
                 x <- diff(log(tmpdata1[,1]),1)
                 plot_acfs(x)
