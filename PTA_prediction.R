@@ -44,8 +44,8 @@ PTA_Prediction <- function(filenames=NULL,trace1=0,trans=0){
         if(!is.null(filenames)){dataM <- addNewIndex(filenames,useYears);}else{dataM <- c();}
         
         jobid <- jobTrace(1,trace1)
-        data <- data_filling()
-        #load("data_2002_2015")
+        #data <- data_filling()
+        load("data_2002_2015")
         data <- cbind(data,dataM)
         mode(data) <- "numeric"
 
@@ -66,9 +66,9 @@ PTA_Prediction <- function(filenames=NULL,trace1=0,trans=0){
         fres <- c(1,7,12,4)
         pers <- c(50,30,20,10)
         precs <- list()
+        backprec <- list()
         
         results <- list()
-        
         for(i in 1:4){
                 jobtmp <- jobTrace(i+1,trace1)
                 tmpdata <- groupPredict(data,i)
@@ -94,8 +94,16 @@ PTA_Prediction <- function(filenames=NULL,trace1=0,trans=0){
                         pred0 <- Target_transform(tmp[[1]]$preds, target0[ind0-1])
                         plot_testing(obs0,pred0,tmp[[1]]$labs)
                 }
-                precs[[i]] <- precision_pred(results[[i]],p=0.05)
+                precs[[i]] <- precision_pred(results[[i]][[1]],p=0.05)
+                backprec[[i]] <- precision_pred(results[[i]][[2]],p=0.05)
         }
+        
+        
+        ### error smaller than p
+        ### trend correct
+        ### both
+        ### residual summary
+        ### R2 summary
         
         jobid <- jobTrace(10,trace1)
         

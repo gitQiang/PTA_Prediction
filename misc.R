@@ -350,17 +350,17 @@ plot_testing <- function(obs,preds,labs){
 }
 
 precision_pred <- function(tmp,p=0.03){
-        n <- length(tmp[[1]]$preds)
-        dobs <- diff(tmp[[1]]$obs,1)
-        dpred <- diff(tmp[[1]]$preds,1)
-        sub1 <- abs(tmp[[1]]$residuals)/tmp[[1]]$obs < p
+        n <- length(tmp$preds)
+        dobs <- diff(tmp$obs,1)
+        dpred <- diff(tmp$preds,1)
+        sub1 <- abs(tmp$residuals)/tmp$obs < p
         sub2 <- dobs * dpred >= 0
         
-        s1 <- sum(sub1)/n
-        s2 <- sum(sub2)/(n-1)
-        s3 <- sum(sub1 & c(TRUE,sub2) )/n
-        s4 <- as.vector(summary(abs(tmp[[1]]$residuals)))
-        s5 <- as.vector(summary(tmp[[1]]$R2))
+        s1 <- sum(sub1)/n  ### error smaller than p
+        s2 <- sum(sub2)/(n-1) ### trend correct
+        s3 <- sum(sub1 & c(TRUE,sub2) )/n ### both
+        s4 <- as.vector(summary(abs(tmp$residuals))) ### residual summary
+        s5 <- as.vector(summary(tmp$R2)) ### R2 summary
         
         list(s1=s1,s2=s2,s3=s3,s4=s4,s5=s5)
 }
