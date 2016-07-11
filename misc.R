@@ -50,7 +50,8 @@ data_filling <- function(){
         path <- "D:/data/恒逸/恒逸共享/调研数据整理/data_v1"
         filenames <- list.files(path,".csv",full.names=TRUE)
         useYears <- 2002:2016
-        useDates <- seq.Date(as.Date("2002-1-1"),as.Date("2016-12-31"),by="day")
+        #useDates <- seq.Date(as.Date("2002-1-1"),as.Date("2016-12-31"),by="day")
+        useDates <- as.Date(read.csv("D:/data/恒逸/恒逸共享/ValidDays2002_2016.csv")[,1])
         useMonths <- paste(year(useDates),month(useDates),sep="-")
         dataM <- c()
         factors <- c()
